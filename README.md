@@ -14,4 +14,5 @@ W pliku `./src/main.py` macie przykładowe użycie solverów, ewentualnie wrzuć
 
 ## Disclaimer
 
-Nie daje gwarancji, że solvery są poprawne, 3 różne LLM'y mówią, że są zgodne z wykładem. Osobiście gwarancji nie daje, weryfikujcie rozwiązania
+Nie daje gwarancji, że solvery są poprawne, 3 różne LLM'y mówią, że są zgodne z wykładem. Osobiście gwarancji nie daje, weryfikujcie rozwiązania. <br>
+Ewentualne poprawki/uwagi piszcie do mnie na DM.
