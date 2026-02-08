@@ -1,16 +1,16 @@
 # Solvery na OK
 
-## Instalacja
-
-Solvery wymagają pakietu NumPy
-
-```sh
-pip install numpy
-```
+## Wymagania
+Solvery działają na bibliotekach standardowych Pythona, nie trzeba nic doinstalowywać.
+Testowane na wersji Pythona `3.14`
 
 ## Używanie
 
-W pliku `./src/main.py` macie przykładowe użycie solverów, ewentualnie wrzućcie w chat to wam wyjaśni dokładnie co i jak działa.
+```bash
+$ python ./src/main.py
+```
+
+Program wyświetla menu z dostępnymi solverami. Można wybrać, który chcemy i następnie podać dane z zadania.
 
 ## Disclaimer
 
