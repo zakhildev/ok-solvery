@@ -86,6 +86,29 @@ def knapsack_dp(weights, values, capacity):
                 dp[i][val] = dp[i - 1][val - v] + w
                 choice[i][val] = True
 
+    print("\n[DEBUG] Tabela DP (Wiersze: przedmioty, Kolumny: łączna wartość, Komórki: minimalna waga)")
+    # Nagłówek kolumn (wartości)
+    print("      ", end="") 
+    for v in range(max_val + 1):
+        print(f"{v:3}", end=" ")
+    print()
+    print("      " + "----" * (max_val + 1))
+
+    # Wiersze
+    for i in range(n + 1):
+        item_info = "START" if i == 0 else f"P{i}(w={weights[i-1]},v={values[i-1]})"
+        print(f"{i:2} | ", end="") # Indeks przedmiotu
+        for v in range(max_val + 1):
+            val = dp[i][v]
+            if val == float('inf'):
+                print("inf", end=" ")
+            else:
+                # Jeśli waga > pojemność, oznaczamy kolorem lub gwiazdką (opcjonalnie)
+                # Tutaj po prostu wypisujemy wagę
+                print(f"{val:3}", end=" ")
+        print(f"  <- {item_info}")
+    # --------------------------------------------------------
+
     best_val = 0
     for v in range(max_val, -1, -1):
         if dp[n][v] <= capacity:
@@ -631,3 +654,40 @@ def carlier(tasks):
     job_c['q'] = q_old
 
     return UB, pi
+
+# ==============================================================================
+# 14. Algorytm Floyda (Wszystkie pary najkrótszych ścieżek) - str. 150
+# ==============================================================================
+def floyd_warshall(n, adj_matrix):
+    """
+    Oblicza najkrótsze ścieżki pomiędzy wszystkimi parami wierzchołków.
+    Wejście:
+        n: liczba wierzchołków
+        adj_matrix: macierz sąsiedztwa n x n, gdzie adj_matrix[i][j] to waga krawędzi.
+                    Brak krawędzi powinien być oznaczony jako float('inf').
+    Wyjście:
+        D: macierz n x n z najkrótszymi odległościami.
+    Złożoność: O(n^3)
+    """
+    # 1. Inicjalizacja macierzy D jako kopii macierzy wag (krok 2-3)
+    # Tworzymy głęboką kopię, aby nie modyfikować oryginału
+    D = [row[:] for row in adj_matrix]
+
+    # 2. Ustawienie odległości wierzchołka do samego siebie na 0 (krok 4)
+    for i in range(n):
+        D[i][i] = 0
+
+    # 3. Główna pętla algorytmu (kroki 5-8)
+    # k - wierzchołek pośredni
+    for k in range(n):
+        # i - wierzchołek początkowy
+        for i in range(n):
+            # j - wierzchołek końcowy
+            for j in range(n):
+                # Relaksacja: czy przejście przez k jest krótsze?
+                # Sprawdzamy, czy ścieżki istnieją (nie są nieskończonością), aby uniknąć błędów
+                if D[i][k] != float('inf') and D[k][j] != float('inf'):
+                    if D[i][j] > D[i][k] + D[k][j]:
+                        D[i][j] = D[i][k] + D[k][j]
+
+    return D
