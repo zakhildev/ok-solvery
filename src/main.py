@@ -1,228 +1,305 @@
-from solvers import BipartiteMatching, Dinic, mcnaughton, knapsack, KruskalMST, huffman, min_late_jobs_number, weighted_unit_tasks, cpm, scheduling_lpt, BrownColoring, flow_with_lower_bounds
+import sys
+import solvers  # Importuje Twoje funkcje z pliku solvers.py
 
-def main() -> None:
-  # McNaughton
-  print("McNaughton")
-  p_times = [2, 5, 4, 7, 1, 3, 8]
-  m_machines = 3
+def get_int(prompt):
+    while True:
+        try:
+            return int(input(prompt))
+        except ValueError:
+            print("Błąd: Wprowadź liczbę całkowitą.")
 
-  cmax_result, harmonogram = mcnaughton(p_times, m_machines)
+def get_float(prompt):
+    while True:
+        try:
+            return float(input(prompt))
+        except ValueError:
+            print("Błąd: Wprowadź liczbę.")
 
-  print(f"Optymalny Cmax: {cmax_result:.2f}")
-  for i, machine_tasks in enumerate(harmonogram):
-    print(f"Maszyna {i+1}:")
-    for task in machine_tasks:
-      print(f"  Zadanie {task[0]}: {task[1]:.2f} -> {task[2]:.2f}")
-  print("-"*30, "\n")
-  
-  # Plecak
-  print("Knapsack")
-  s_weights = [5, 3, 2, 4, 3] 
-  w_values  = [3, 4, 2, 6, 1]
-  b_cap = 10
+def get_list_int(prompt):
+    while True:
+        try:
+            line = input(prompt)
+            return [int(x) for x in line.strip().split()]
+        except ValueError:
+            print("Błąd: Wprowadź liczby całkowite oddzielone spacją.")
 
-  max_val, items, table = knapsack(w_values, s_weights, b_cap)
+def get_list_float(prompt):
+    while True:
+        try:
+            line = input(prompt)
+            return [float(x) for x in line.strip().split()]
+        except ValueError:
+            print("Błąd: Wprowadź liczby oddzielone spacją.")
 
-  print(f"Maksymalna wartość: {max_val}")
-  print(f"Wybrane przedmioty (indeksy): {items}")
-  print(f"Całkowita waga wybranych: {sum([s_weights[i] for i in items])}")
-  for row_idx, row in enumerate(table):
-    print(f"Wiersz {row_idx}: {row}")
-  print("-"*30, "\n")
-  
-  graph_example = [
-    [0, 2, 0, 6, 0], # 0
-    [2, 0, 3, 8, 5], # 1
-    [0, 3, 0, 0, 7], # 2
-    [6, 8, 0, 0, 9], # 3
-    [0, 5, 7, 9, 0]  # 4
-  ]
+def print_separator():
+    print("-" * 60)
 
-  # Krusal
-  print("Kruskal (Drzewo rozpinające)")
-  solver = KruskalMST(graph_example)
-  waga, krawedzie = solver.solve()
+# ==============================================================================
+# Obsługa poszczególnych algorytmów
+# ==============================================================================
 
-  print(f"Całkowita waga MST: {waga}")
-  print("Krawędzie w MST (u, v, waga):")
-  for u, v, w in krawedzie:
-    print(f"  {u} -- {v} [waga: {w}]")
-  print("-"*30, "\n")
-
-  # Huffman
-  print("Huffman")
-  data = {
-    'a': 0.1,
-    'b': 0.3,
-    'c': 0.4,
-    'd': 0.2
-  }
-
-  huffman_codes, l_avg = huffman(data)
-
-  print("Kody Huffmana:")
-  for char, code in sorted(huffman_codes.items()):
-    print(f"  Symbol: {char}, Kod: {code}, Długość: {len(code)}")
-
-  print(f"Średnia ważona długość kodu (L): {l_avg}")
-  print("-"*30, "\n")
-  
-  # Zadania spóźnione
-  print("Minimalizacja Liczby Spóźnionych Zadań")
-  p_times_ex = [2, 4, 1, 3, 2]
-  d_dates_ex = [3, 5, 2, 8, 4]
-
-  late_count, ok_jobs = min_late_jobs_number(p_times_ex, d_dates_ex)
-
-  print(f"Liczba spóźnionych zadań: {late_count}")
-  print(f"Zadania wykonane na czas (indeksy): {ok_jobs}")
-  print("-"*30, "\n")
-  
-  print("Ważona Liczba Spóźnionych Zadań")
-  w_weights =      [10, 20, 30, 40]
-  d_dates_unit =   [1,  1,  3,  2]
-
-  penalty, final_schedule = weighted_unit_tasks(w_weights, d_dates_unit)
-
-  print(f"Całkowita kara (suma wag spóźnionych): {penalty}")
-  print("Harmonogram (kolejne sloty czasowe 1, 2, 3...):")
-  print(final_schedule)
-  print("-"*30, "\n")
-  
-  # CPM
-  print("Metoda ścieżki krytycznej")
-  edges_cpm = [
-    (0, 1, 3), 
-    (0, 2, 2),
-    (1, 3, 5),
-    (2, 3, 1),
-    (2, 4, 4),
-    (3, 5, 2),
-    (4, 5, 1)
-  ]
-  n_nodes = 6
-
-  duration, crit_path, es_table, ls_table = cpm(n_nodes, edges_cpm)
-
-  print(f"Czas trwania projektu: {duration}")
-  print(f"Węzły na ścieżce krytycznej: {crit_path}")
-  print("-" * 30)
-  print(f"{'Węzeł':<6} | {'ES (Alpha)':<10} | {'LS (Beta)':<10} | {'Luz':<10}")
-  for i in range(n_nodes):
-      slack = ls_table[i] - es_table[i]
-      print(f"{i:<6} | {es_table[i]:<10} | {ls_table[i]:<10} | {slack:<10}")
-  print("-"*30, "\n")
-  
-  # Dinic
-  print("Dinic (przepływ ograniczenia górne)")
-  dinic = Dinic(6)
-
-  # Dodawanie krawędzi (u, v, capacity)
-  # Przykład klasyczny:
-  dinic.add_edge(0, 1, 10)
-  dinic.add_edge(0, 2, 10)
-  dinic.add_edge(1, 2, 2)
-  dinic.add_edge(1, 3, 4)
-  dinic.add_edge(1, 4, 8)
-  dinic.add_edge(2, 4, 9)
-  dinic.add_edge(3, 5, 10)
-  dinic.add_edge(4, 3, 6)
-  dinic.add_edge(4, 5, 10)
-
-  source = 0
-  sink = 5
-
-  print(f"Maksymalny przepływ (Algorytm Dinica): {dinic.solve_max_flow(source, sink)}")
-  print("-"*30, "\n")
-  
-  # Flow min-bound
-  print("Flow min-bound (przepływ ograniczenia dolne)")
-  
-  num_nodes = 4
-  source = 0
-  sink = 3
-
-  edges = [
-    (0, 1, 1, 4),
-    (0, 2, 1, 2),
-    (1, 3, 1, 2),
-    (2, 3, 1, 3),
-  ]
-
-  feasible, max_flow = flow_with_lower_bounds(
-    num_nodes=num_nodes,
-    edges=edges,
-    source=source,
-    sink=sink
-  )
-
-  print("Czy istnieje dopuszczalny przepływ:", feasible)
-  if feasible:
-    print("Wartość przepływu source -> sink:", max_flow)
-  print("-"*30, "\n")
-
-  # Szeregowanie zadań dla maszyn
-  print("lpt")
-  p_times_lpt = [2, 14, 4, 16, 6, 5, 3]
-  m_machines_lpt = 3
-
-  cmax_val, schedule_lpt = scheduling_lpt(p_times_lpt, m_machines_lpt)
-  print(f"LPT Cmax (Makespan): {cmax_val}")
-  print("-" * 30)
-  for m_idx, tasks in enumerate(schedule_lpt):
-    print(f"Maszyna {m_idx + 1}:")
-    tasks.sort(key=lambda x: x['start']) # Sortowanie dla czytelności wyświetlania
-    for t in tasks:
-      print(f"  [Czas: {t['start']:>2} - {t['end']:>2}] Zadanie {t['id']} (dł. {t['duration']})")
-  print("-"*30, "\n")
-  
-  adj_matrix = [
-    [1, 1, 0, 0], # Pracownik 0 może robić zadanie 0 i 1
-    [0, 1, 0, 0], # Pracownik 1 może robić tylko zadanie 1
-    [1, 0, 1, 0]  # Pracownik 2 może robić zadanie 0 i 2
-  ]
-
-  # Skojarzenia
-  print("Skojarzenia w grafie")
-  solver = BipartiteMatching(adj_matrix)
-  count, result_pairs = solver.solve()
-
-  print(f"Maksymalna liczba skojarzeń: {count}")
-  print("Pary (Lewy -> Prawy):")
-  for u, v in result_pairs:
-      print(f"  Pracownik {u} -> Zadanie {v}")
-  print("-"*30, "\n")
-  
-  print("kolorowanie algorytmem Browna")
-  graph_matrix = [
-      [0, 1, 1, 0, 0, 0], # 0
-      [1, 0, 1, 1, 0, 0], # 1
-      [1, 1, 0, 1, 1, 0], # 2
-      [0, 1, 1, 0, 1, 1], # 3
-      [0, 0, 1, 1, 0, 1], # 4
-      [0, 0, 0, 1, 1, 0]  # 5
-  ]
-
-  # Kolorowanie
-  solver = BrownColoring(graph_matrix)
-  chi, colors = solver.solve()
-
-  print(f"Liczba chromatyczna (χ): {chi}")
-  print("Kolory wierzchołków (0 -> N-1):")
-  print(colors)
-
-  # Weryfikacja
-  print("\n--- Weryfikacja poprawności ---")
-  valid = True
-  for i in range(len(graph_matrix)):
-      for j in range(i + 1, len(graph_matrix)):
-          if graph_matrix[i][j] == 1 and colors[i] == colors[j]:
-              print(f"BŁĄD: Wierzchołki {i} i {j} są połączone i mają ten sam kolor {colors[i]}!")
-              valid = False
-  if valid:
-      print("Kolorowanie jest poprawne.")
-  print("-"*30, "\n")
+def run_mcnaughton():
+    print("\n--- Algorytm McNaughtona (P|pmtn|Cmax) ---")
+    print("Instrukcja: Podaj liczbę maszyn oraz czasy trwania zadań.")
+    m = get_int("Liczba maszyn (m): ")
+    p_times = get_list_float("Czasy zadań (p1 p2 ... pn): ")
     
+    cmax, schedule = solvers.mcnaughton(p_times, m)
+    
+    print_separator()
+    print(f"Wynik Cmax: {cmax}")
+    print("Harmonogram:")
+    for i, machine_tasks in enumerate(schedule):
+        print(f"Maszyna {i+1}:")
+        for task in machine_tasks:
+            print(f"  - Zadanie {task['task']}: {task['start']:.2f} -> {task['end']:.2f}")
+
+def run_knapsack():
+    print("\n--- Problem Plecakowy (DP) ---")
+    print("Instrukcja: Podaj pojemność plecaka, wagi przedmiotów i ich wartości.")
+    print("Wagi i wartości muszą być podane w tej samej kolejności.")
+    
+    capacity = get_int("Pojemność plecaka: ")
+    weights = get_list_int("Wagi przedmiotów (w1 w2 ... wn): ")
+    values = get_list_int("Wartości przedmiotów (v1 v2 ... vn): ")
+    
+    if len(weights) != len(values):
+        print("Błąd: Liczba wag nie zgadza się z liczbą wartości!")
+        return
+
+    best_val, chosen = solvers.knapsack_dp(weights, values, capacity)
+    
+    print_separator()
+    print(f"Maksymalna wartość: {best_val}")
+    print(f"Wybrane przedmioty (indeksy 1-based): {chosen}")
+
+def run_kruskal():
+    print("\n--- Minimalne Drzewo Rozpinające (Kruskal) ---")
+    print("Instrukcja: Podaj liczbę wierzchołków oraz krawędzie w formacie: u v waga.")
+    
+    n = get_int("Liczba wierzchołków (n): ")
+    m = get_int("Liczba krawędzi: ")
+    
+    edges = []
+    print("Podaj krawędzie (u v waga):")
+    for _ in range(m):
+        edges.append(tuple(get_list_int("-> ")))
+        
+    mst_weight, mst_edges = solvers.mst_kruskal(n, edges)
+    
+    print_separator()
+    print(f"Waga MST: {mst_weight}")
+    print("Krawędzie w MST:", mst_edges)
+
+def run_huffman():
+    print("\n--- Kodowanie Huffmana ---")
+    print("Instrukcja: Podaj pary 'znak częstość'. Np. 'a 5'.")
+    
+    count = get_int("Ile symboli chcesz wprowadzić? ")
+    symbols = []
+    for _ in range(count):
+        line = input("Symbol i częstość (np. 'a 5'): ").split()
+        if len(line) == 2:
+            symbols.append((line[0], int(line[1])))
+        else:
+            print("Błąd formatu, pomijam.")
+            
+    codes = solvers.huffman(symbols)
+    
+    print_separator()
+    print("Kody Huffmana:")
+    for char, code in codes.items():
+        print(f"  {char}: {code}")
+
+def run_weighted_late_jobs():
+    print("\n--- Ważona liczba spóźnionych zadań (1 || Sum w_j U_j) ---")
+    print("Instrukcja: Podaj czasy trwania, terminy (deadlines) i wagi zadań.")
+    
+    p = get_list_int("Czasy trwania (p): ")
+    d = get_list_int("Terminy (d): ")
+    w = get_list_int("Wagi (w): ")
+    
+    if not (len(p) == len(d) == len(w)):
+        print("Błąd: Listy muszą mieć tę samą długość!")
+        return
+
+    result = solvers.weighted_late_jobs(p, d, w)
+    print_separator()
+    print(f"Maksymalna waga zadań wykonanych o czasie: {result}") 
+    # Uwaga: Oryginalna funkcja w solvers.py zwraca: total_weight - max_weight_on_time
+    # czyli minimalną stratę (wagę spóźnionych).
+    print(f"(Jest to minimalna suma wag zadań spóźnionych).")
+
+def run_moore_hodgson():
+    print("\n--- Liczba spóźnionych zadań (Moore-Hodgson) ---")
+    print("Instrukcja: Podaj czasy trwania i terminy.")
+    
+    p = get_list_int("Czasy trwania (p): ")
+    d = get_list_int("Terminy (d): ")
+    
+    if len(p) != len(d):
+        print("Błąd: Długości list się nie zgadzają!")
+        return
+        
+    num_late, late_tasks = solvers.moore_hodgson(p, d)
+    print_separator()
+    print(f"Liczba spóźnionych zadań: {num_late}")
+    print(f"ID zadań spóźnionych: {late_tasks}")
+
+def run_cpm():
+    print("\n--- Metoda Ścieżki Krytycznej (CPM) ---")
+    print("Instrukcja: Węzły numerowane od 0 do n-1.")
+    
+    n = get_int("Liczba zadań (węzłów): ")
+    durations = get_list_int(f"Czasy trwania dla {n} zadań: ")
+    
+    if len(durations) != n:
+        print("Błąd liczby czasów.")
+        return
+
+    m = get_int("Liczba zależności (krawędzi): ")
+    edges = []
+    print("Podaj zależności (u v) oznaczające u -> v:")
+    for _ in range(m):
+        edges.append(tuple(get_list_int("-> ")))
+        
+    try:
+        es, ls, cmax = solvers.cpm(n, durations, edges)
+        print_separator()
+        print(f"Czas wykonania projektu (Cmax): {cmax}")
+        print("Zadanie | ES | LS | Rezerwa (LS-ES)")
+        for i in range(n):
+            print(f"{i:7} | {es[i]:2} | {ls[i]:2} | {ls[i] - es[i]:2}")
+    except ValueError as e:
+        print(f"Błąd: {e}")
+
+def run_flow_bounds():
+    print("\n--- Przepływ z ograniczeniami (Dinic) ---")
+    print("Instrukcja: Węzły numerowane od 0 do n-1.")
+    
+    n = get_int("Liczba wierzchołków: ")
+    s = get_int("Źródło (s): ")
+    t = get_int("Ujście (t): ")
+    m = get_int("Liczba krawędzi: ")
+    
+    edges = []
+    print("Podaj krawędzie (u v dolne_ogr pojemność):")
+    for _ in range(m):
+        edges.append(tuple(get_list_int("-> ")))
+        
+    possible, max_f = solvers.flow_with_bounds(n, s, t, edges)
+    print_separator()
+    if possible:
+        print(f"Przepływ możliwy. Maksymalny przepływ: {max_f}")
+    else:
+        print("Przepływ niemożliwy (nie spełniono ograniczeń dolnych).")
+
+def run_list_scheduling():
+    print("\n--- List Scheduling (P || Cmax) ---")
+    m = get_int("Liczba maszyn: ")
+    p = get_list_float("Czasy zadań: ")
+    
+    cmax, assignments = solvers.list_scheduling(p, m)
+    print_separator()
+    print(f"Cmax: {cmax}")
+    for i, tasks in enumerate(assignments):
+        print(f"Maszyna {i}: Zadania {tasks}")
+
+def run_schrage_carlier():
+    print("\n--- Algorytmy Szeregowania RPQ (Schrage / Carlier) ---")
+    print("Wybierz wariant:")
+    print("1. Schrage (zwykły)")
+    print("2. Schrage (z podziałem - pmtn)")
+    print("3. Carlier (optymalny)")
+    
+    choice = input("Wybór: ")
+    
+    n = get_int("Liczba zadań: ")
+    tasks = []
+    print("Podaj parametry dla każdego zadania: r (dostęp), p (czas), q (stygnięcie)")
+    for i in range(n):
+        r, p, q = get_list_int(f"Zadanie {i+1} (r p q): ")
+        tasks.append({'id': i+1, 'r': r, 'p': p, 'q': q})
+        
+    print_separator()
+    if choice == '1':
+        umax, order = solvers.schrage(tasks)
+        print(f"Schrage Cmax: {umax}")
+        print(f"Kolejność: {order}")
+    elif choice == '2':
+        lmax = solvers.schrage_pmtn(tasks)
+        print(f"Schrage PMTN (Dolne oszacowanie): {lmax}")
+    elif choice == '3':
+        # Carlier modyfikuje listę tasks w miejscu, więc robimy kopię głęboką jeśli potrzeba
+        # ale tutaj prosta kopia listy słowników wystarczy
+        from copy import deepcopy
+        tasks_copy = deepcopy(tasks)
+        cmax, order = solvers.carlier(tasks_copy)
+        print(f"Carlier Optymalny Cmax: {cmax}")
+        # Uwaga: Carlier w solvers.py zwraca `pi` ze Schrage'a, co jest heurystyką
+        # Dla pełnej kolejności optymalnej algorytm musiałby zwracać dokładną permutację, 
+        # ale zazwyczaj w Carlier interesuje nas wartość Cmax.
+    else:
+        print("Niepoprawny wybór.")
+
+def run_brown():
+    print("\n--- Algorytm Browna (Kolorowanie grafu) ---")
+    n = get_int("Liczba wierzchołków (0..n-1): ")
+    m = get_int("Liczba krawędzi: ")
+    edges = []
+    print("Podaj krawędzie (u v):")
+    for _ in range(m):
+        edges.append(tuple(get_list_int("-> ")))
+        
+    min_colors, coloring = solvers.brown_algorithm(n, edges)
+    print_separator()
+    print(f"Minimalna liczba kolorów (Liczba chromatyczna): {min_colors}")
+    print("Kolorowanie (wierzchołek: kolor):")
+    for node in sorted(coloring.keys()):
+        print(f"  {node}: {coloring[node]}")
+
+# ==============================================================================
+# MENU GŁÓWNE
+# ==============================================================================
+
+def main():
+    options = {
+        '1': ("McNaughton (Szeregowanie podzielne)", run_mcnaughton),
+        '2': ("Problem Plecakowy (DP)", run_knapsack),
+        '3': ("MST (Kruskal)", run_kruskal),
+        '4': ("Huffman", run_huffman),
+        '5': ("Ważona liczba spóźnionych (DP)", run_weighted_late_jobs),
+        '6': ("Liczba spóźnionych (Moore-Hodgson)", run_moore_hodgson),
+        '7': ("CPM (Ścieżka Krytyczna)", run_cpm),
+        '8': ("Przepływ z ograniczeniami (Dinic)", run_flow_bounds),
+        '9': ("List Scheduling (Szeregowanie zachłanne)", run_list_scheduling),
+        '10': ("Schrage / Carlier (RPQ)", run_schrage_carlier),
+        '11': ("Algorytm Browna (Kolorowanie)", run_brown),
+        '0': ("Wyjście", sys.exit)
+    }
+
+    while True:
+        print("\n" + "="*40)
+        print(" SYSTEM ROZWIĄZYWANIA PROBLEMÓW (SOLVERS)")
+        print("="*40)
+        for key, (desc, _) in options.items():
+            print(f"{key}. {desc}")
+        print("="*40)
+        
+        choice = input("Wybierz opcję: ")
+        
+        if choice in options:
+            try:
+                # Uruchomienie wybranej funkcji
+                options[choice][1]()
+            except Exception as e:
+                print(f"\n!!! Wystąpił niespodziewany błąd: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            input("\nNaciśnij ENTER, aby kontynuować...")
+        else:
+            print("Nieprawidłowy wybór. Spróbuj ponownie.")
+
 if __name__ == "__main__":
-  main()
-  
+    main()

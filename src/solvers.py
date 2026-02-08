@@ -1,768 +1,633 @@
-from collections import deque, defaultdict
-import numpy as np
 import heapq
+import sys
+from collections import deque, defaultdict
+import math
 
-def mcnaughton(processing_times, num_machines):
-  """
-  Rozwiązuje problem P|pmtn|Cmax algorytmem McNaughtona.
-  
-  Args:
-    processing_times (list): Lista czasów wykonywania zadań (p_j)
-    num_machines (int): Liczba dostępnych maszyn (m)
-      
-  Returns:
-    float: Optymalny czas Cmax
-    list: Harmonogram (lista list, gdzie każda podlista to zadania na danej maszynie)
-      Format zadania: (id_zadania, start, koniec)
-  """
-  n = len(processing_times)
-  total_work = sum(processing_times)
-  max_job = max(processing_times)
-  
-  # Krok 1: Obliczenie optymalnego Cmax
-  c_max = max(max_job, total_work / num_machines)
-  
-  schedule = [[] for _ in range(num_machines)]
-  
-  current_machine = 0
-  current_time = 0.0
-  
-  # Krok 2-6: Układanie zadań
-  for job_id, p in enumerate(processing_times):
-    # Zadanie wchodzi w całości na obecną maszynę
-    if current_time + p <= c_max + 1e-9: # 1e-9 dla błędu float
-      schedule[current_machine].append((job_id, current_time, current_time + p))
-      current_time += p
+# ==============================================================================
+# 1. Algorytm McNaughtona (P|pmtn|Cmax)
+# ==============================================================================
+def mcnaughton(p_times, m):
+    """
+    Szeregowanie zadań podzielnych na m maszynach w celu minimalizacji Cmax.
+    Złożoność: O(n)
+    """
+    n = len(p_times)
+    total_time = sum(p_times)
+    max_p = max(p_times) if p_times else 0
+    
+    # Cmax to maksimum z (średnie obciążenie, najdłuższe zadanie)
+    c_max = max(max_p, total_time / m)
+    
+    schedule = [[] for _ in range(m)]
+    current_machine = 0
+    current_time = 0.0
+    
+    for i, p in enumerate(p_times):
+        time_left = p
+        task_id = i + 1
         
-        # Jeśli idealnie wypełniliśmy maszynę, przeskocz do następnej
-      if abs(current_time - c_max) < 1e-9:
-        current_machine += 1
-        current_time = 0.0
-    else:
-      # Zadanie trzeba podzielić (nie mieści się)
-      part1 = c_max - current_time
-      part2 = p - part1
-      
-      # Część 1: Dopełniamy obecną maszynę
-      schedule[current_machine].append((job_id, current_time, c_max))
-      
-      # Przeskok na następną maszynę
-      current_machine += 1
-      if current_machine < num_machines:
-        # Część 2: Reszta ląduje na początku nowej maszyny
-        schedule[current_machine].append((job_id, 0.0, part2))
-        current_time = part2
-      else:
-        # To teoretycznie nie powinno wystąpić przy poprawnym Cmax,
-        # chyba że błędy zaokrągleń float są duże.
-        pass
-  return c_max, schedule
+        while time_left > 1e-9:
+            space_on_machine = c_max - current_time
+            
+            if time_left <= space_on_machine:
+                # Zadanie mieści się w całości na obecnej maszynie
+                schedule[current_machine].append({
+                    'task': task_id, 
+                    'start': current_time, 
+                    'end': current_time + time_left
+                })
+                current_time += time_left
+                time_left = 0
+                
+                # Jeśli maszyna pełna (z dokładnością float), idź do następnej
+                if abs(current_time - c_max) < 1e-9:
+                    current_machine += 1
+                    current_time = 0.0
+            else:
+                # Zadanie trzeba podzielić
+                schedule[current_machine].append({
+                    'task': task_id, 
+                    'start': current_time, 
+                    'end': c_max
+                })
+                time_left -= space_on_machine
+                current_machine += 1
+                current_time = 0.0
+                
+    return c_max, schedule
 
-def knapsack(values, weights, capacity):
-  """
-  Alternatywny algorytm plecakowy (minimalizacja wagi dla danej wartości).
-  Zgodny ze slajdami 67-68.
-  
-  Args:
-    values (list): Lista wartości przedmiotów (w_i w notacji z wykładu)
-    weights (list): Lista wag/rozmiarów przedmiotów (s_i w notacji z wykładu)
-    capacity (int): Pojemność plecaka (b)
-      
-  Returns:
-    int: Maksymalna wartość plecaka
-    list: Indeksy wybranych przedmiotów
-    np.array: Tabela DP (do wglądu)
-  """
-  n = len(values)
-  max_possible_value = sum(values) # UB (Upper Bound)
-  
-  # Inicjalizacja tabeli nieskończonością (oznacza: nie da się uzyskać tej wartości)
-  # Wiersze: 0..n (przedmioty), Kolumny: 0..UB (wartości)
-  # g(i, j) w kodzie to dp[i][j]
-  dp = np.full((n + 1, max_possible_value + 1), float('inf'))
-  
-  # Warunek brzegowy: Wartość 0 uzyskujemy wagą 0
-  dp[0][0] = 0
-  
-  # Wypełnianie tabeli [cite: 724]
-  for i in range(1, n + 1):
-    v = values[i-1]   # wartość bieżącego przedmiotu
-    w = weights[i-1]  # waga bieżącego przedmiotu
+# ==============================================================================
+# 2. Problem Plecakowy (DP - wartości w kolumnach)
+# ==============================================================================
+def knapsack_dp(weights, values, capacity):
+    """
+    Problem plecakowy - metoda DP względem wartości (z wykładu).
+    Użyteczna, gdy sumaryczna wartość jest niewielka.
+    dp[v] = minimalna waga potrzebna do osiągnięcia wartości v.
+    """
+    n = len(weights)
+    max_val = sum(values)
+   
+    # dp[i][v] = minimal weight to achieve value v using first i items
+    dp = [[float('inf')] * (max_val + 1) for _ in range(n + 1)]
+    dp[0][0] = 0
+
+    # choice[i][v] = True if item i was taken to achieve value v
+    choice = [[False] * (max_val + 1) for _ in range(n + 1)]
+
+    for i in range(1, n + 1):
+        w = weights[i - 1]
+        v = values[i - 1]
+        for val in range(max_val + 1):
+            # do not take item i
+            dp[i][val] = dp[i - 1][val]
+            # take item i if possible
+            if val >= v and dp[i - 1][val - v] + w < dp[i][val]:
+                dp[i][val] = dp[i - 1][val - v] + w
+                choice[i][val] = True
+
+    best_val = 0
+    for v in range(max_val, -1, -1):
+        if dp[n][v] <= capacity:
+            best_val = v
+            break
+            
+    # reconstruction          
     
-    for j in range(max_possible_value + 1):
-      # Opcja 1: Nie bierzemy przedmiotu 'i' -> waga taka jak wcześniej
-      not_taken = dp[i-1][j]
-      
-      # Opcja 2: Bierzemy przedmiot 'i' (jeśli celowana wartość j >= v)
-      taken = float('inf')
-      if j >= v:
-        if dp[i-1][j-v] != float('inf'):
-          taken = dp[i-1][j-v] + w
-      
-      # Wybieramy opcję dającą MNIEJSZĄ wagę
-      dp[i][j] = min(not_taken, taken)
+    chosen_items = []
 
-  # Szukanie wyniku: Największa wartość (j), dla której waga <= capacity
-  best_value = 0
-  for j in range(max_possible_value, -1, -1):
-    if dp[n][j] <= capacity:
-      best_value = j
-      break
-          
-  # Odtwarzanie rozwiązania (backtracking)
-  selected_items = []
-  curr_val = best_value
-  for i in range(n, 0, -1):
-    # Jeśli waga jest inna niż wiersz wyżej przy tej samej wartości, 
-    # to znaczy, że wzięliśmy przedmiot
-    if dp[i][curr_val] != dp[i-1][curr_val]:
-      selected_items.append(i-1) # Indeks 0-based
-      curr_val -= values[i-1]
+    v = best_val
+    for i in range(n, 0, -1):
+        if choice[i][v]:
+            chosen_items.append(i)
+            v -= values[i - 1]
 
-  return best_value, selected_items[::-1], dp
+    chosen_items.reverse()
+    return best_val, chosen_items
 
-class KruskalMST:
-  """
-  Algorytm do drzewa rozpinającego
-  """
-  def __init__(self, adj_matrix):
-    self.adj_matrix = np.array(adj_matrix)
-    self.num_nodes = self.adj_matrix.shape[0]
-    # Struktury dla Union-Find (zgodnie ze slajdami 105-106)
-    self.parent = list(range(self.num_nodes))
-    self.rank = [0] * self.num_nodes
+# ==============================================================================
+# 3. Minimalne Drzewo Rozpinające (Kruskal)
+# ==============================================================================
+class UnionFind:
+    def __init__(self, n):
+        self.parent = list(range(n + 1))
+    def find(self, i):
+        if self.parent[i] == i:
+            return i
+        self.parent[i] = self.find(self.parent[i])
+        return self.parent[i]
+    def union(self, i, j):
+        root_i = self.find(i)
+        root_j = self.find(j)
+        if root_i != root_j:
+            self.parent[root_i] = root_j
+            return True
+        return False
 
-  def find(self, i):
-    """Znajduje reprezentanta zbioru (z kompresją ścieżki)."""
-    if self.parent[i] != i:
-      self.parent[i] = self.find(self.parent[i])
-    return self.parent[i]
-
-  def union(self, i, j):
-    """Łączy dwa zbiory (union by rank)."""
-    root_i = self.find(i)
-    root_j = self.find(j)
-
-    if root_i != root_j:
-      # Dołączamy mniejsze drzewo do większego
-      if self.rank[root_i] < self.rank[root_j]:
-        self.parent[root_i] = root_j
-      elif self.rank[root_i] > self.rank[root_j]:
-        self.parent[root_j] = root_i
-      else:
-        self.parent[root_j] = root_i
-        self.rank[root_i] += 1
-      return True # Połączono
-    return False # Już były w tym samym zbiorze (cykl)
-
-  def solve(self):
-    edges = []
-    # 1. Konwersja macierzy na listę krawędzi: (waga, u, v)
-    for r in range(self.num_nodes):
-      for c in range(r + 1, self.num_nodes): # Tylko górny trójkąt macierzy
-        weight = self.adj_matrix[r][c]
-        if weight > 0: # Zakładamy, że 0 to brak krawędzi (lub waga > 0)
-          edges.append((weight, r, c))
-    
-    # 2. Sortowanie krawędzi rosnąco wg wagi (kluczowe dla Kruskala)
-    edges.sort(key=lambda x: x[0])
-    
+def mst_kruskal(n, edges):
+    """
+    edges: lista krotek (u, v, waga)
+    """
+    edges.sort(key=lambda x: x[2])
+    uf = UnionFind(n)
     mst_weight = 0
     mst_edges = []
     
-    # 3. Główna pętla
-    for weight, u, v in edges:
-      # Jeśli wierzchołki są w różnych zbiorach, dodaj krawędź
-      if self.union(u, v):
-        mst_edges.append((u, v, weight))
-        mst_weight += weight
+    for u, v, w in edges:
+        if uf.union(u, v):
+            mst_weight += w
+            mst_edges.append((u, v, w))
             
     return mst_weight, mst_edges
 
-def huffman(symbols_dict):
-  """
-  Buduje drzewo Huffmana i generuje kody.
-
-  Args:
-    symbols_dict (dict): Słownik {symbol: prawdopodobieństwo/częstość}
-    
-  Returns:
-    dict: Słownik {symbol: kod_binarny}
-    float: Średnia ważona długość kodu (L)
-  """
-  class _HuffmanNode:
+# ==============================================================================
+# 4. Algorytm Huffmana
+# ==============================================================================
+class HuffmanNode:
     def __init__(self, char, freq):
         self.char = char
         self.freq = freq
         self.left = None
         self.right = None
-
-    # Metoda potrzebna dla heapq do porównywania węzłów (sortowanie po freq)
+    
     def __lt__(self, other):
         return self.freq < other.freq
-  
-  # 1. Tworzenie liści i wrzucanie na kopiec (kolejkę priorytetową)
-  heap = [_HuffmanNode(char, freq) for char, freq in symbols_dict.items()]
-  heapq.heapify(heap)
 
-  # 2. Budowanie drzewa (łączenie dwóch najmniejszych)
-  while len(heap) > 1:
-    # Pobierz dwa węzły o najmniejszej częstości
-    left_child = heapq.heappop(heap)
-    right_child = heapq.heappop(heap)
-
-    # Stwórz nowy węzeł wewnętrzny (suma wag)
-    merged = _HuffmanNode(None, left_child.freq + right_child.freq)
-    merged.left = left_child
-    merged.right = right_child
-
-    # Wrzuć z powrotem na kopiec
-    heapq.heappush(heap, merged)
-
-  # Ostatni element na kopcu to korzeń drzewa
-  root = heap[0]
-
-  # 3. Generowanie kodów (przejście DFS)
-  codes = {}
-
-  def generate_codes_recursive(node, current_code):
-    if node is None:
-        return
-
-    # Jeśli to liść (ma symbol), zapisz kod
-    if node.char is not None:
-        codes[node.char] = current_code
-        return
-
-    # Rekurencja w lewo (dodaj '0') i w prawo (dodaj '1')
-    generate_codes_recursive(node.left, current_code + "0")
-    generate_codes_recursive(node.right, current_code + "1")
-
-  generate_codes_recursive(root, "")
-
-  # Obliczenie średniej długości (L) dla weryfikacji
-  avg_length = sum(len(code) * symbols_dict[char] for char, code in codes.items())
-
-  return codes, avg_length
-
-def min_late_jobs_number(processing_times, due_dates):
-  """
-  Minimalizacja liczby spóźnionych zadań (Algorytm Moore'a-Hodgsona).
-  Wersja poprawiona.
-  """
-  # Tworzymy listę zadań: (id, p, d)
-  jobs = []
-  for i in range(len(processing_times)):
-    jobs.append({
-      'id': i,
-      'p': processing_times[i],
-      'd': due_dates[i]
-    })
-  
-  # 1. Sortowanie wg terminów (EDD) - rosnąco
-  jobs.sort(key=lambda x: x['d'])
-  
-  current_time = 0
-  # Kopiec przechowuje krotki: (-czas_trwania, id_zadania)
-  # Przechowujemy tylko ID, żeby uniknąć błędu porównywania słowników
-  scheduled_jobs_heap = [] 
-  
-  for job in jobs:
-    # Dodajemy zadanie próbnie do harmonogramu
-    # -job['p'] pozwala symulować max-heap (najdłuższe zadanie na wierzchu)
-    heapq.heappush(scheduled_jobs_heap, (-job['p'], job['id'])) 
-    current_time += job['p']
-    
-    # Jeśli zadanie się spóźniło (termin przekroczony)
-    if current_time > job['d']:
-      # Wyrzucamy najdłuższe zadanie z dotychczas zaplanowanych
-      longest_p_neg, _ = heapq.heappop(scheduled_jobs_heap)
-      longest_p = -longest_p_neg
-      
-      # Cofamy czas o długość wyrzuconego zadania
-      current_time -= longest_p
-          
-  # Zbieramy wyniki z kopca (drugi element krotki to ID)
-  on_time_indices = [jid for _, jid in scheduled_jobs_heap]
-  on_time_indices.sort()
-  
-  num_late = len(jobs) - len(on_time_indices)
-  
-  return num_late, on_time_indices
-
-def weighted_unit_tasks(weights, due_dates):
-  """
-  Minimalizacja ważonej liczby spóźnionych zadań dla pj=1.
-  Problem: 1 | pj=1 | Sum wjUj
-
-  Args:
-    weights (list): Wagi zadań (w_j)
-    due_dates (list): Terminy zakończenia (d_j)
-    
-  Returns:
-    int: Suma wag spóźnionych zadań
-    list: Harmonogram (tablica o długości n, gdzie schedule[t] to ID zadania w czasie t+1)
-  """
-  n = len(weights)
-  jobs = []
-  for i in range(n):
-    jobs.append({
-      'id': i,
-      'w': weights[i],
-      'd': due_dates[i]
-    })
-    
-  # 1. Sortowanie wg wag malejąco (najważniejsze najpierw)
-  jobs.sort(key=lambda x: x['w'], reverse=True)
-
-  # Reprezentacja osi czasu (sloty). Czas biegnie 1..n
-  # Używamy zbioru zajętych slotów dla szybkiego sprawdzania
-  # (lub tablicy union-find dla dużych n, ale tu pętla wystarczy)
-  schedule = [None] * n  # schedule[i] oznacza zadanie w slocie (czas i+1)
-  late_jobs = []
-  total_penalty = 0
-
-  for job in jobs:
-    assigned = False
-    # 2. Szukamy wolnego slotu od min(d, n) w dół do 1
-    # (indeksy w tablicy schedule: od min(d-1, n-1) do 0)
-    start_search = min(job['d'], n) - 1
-    
-    for t in range(start_search, -1, -1):
-      if schedule[t] is None:
-        schedule[t] = job['id']
-        assigned = True
-        break
-    
-    if not assigned:
-      late_jobs.append(job['id'])
-      total_penalty += job['w']
+def huffman(symbols):
+    """
+    symbols: lista krotek (znak, częstość) lub słownik
+    """
+    if isinstance(symbols, dict):
+        symbols = list(symbols.items())
         
-  # Wypełniamy puste sloty zadaniami spóźnionymi (opcjonalne, dla pełnego harmonogramu)
-  late_idx = 0
-  for t in range(n):
-    if schedule[t] is None and late_idx < len(late_jobs):
-      schedule[t] = late_jobs[late_idx]
-      late_idx += 1
+    heap = [HuffmanNode(char, freq) for char, freq in symbols]
+    heapq.heapify(heap)
+    
+    while len(heap) > 1:
+        left = heapq.heappop(heap)
+        right = heapq.heappop(heap)
         
-  return total_penalty, schedule
-
-def cpm(num_nodes, edges):
-  """
-  Metoda Ścieżki Krytycznej (CPM).
-  Oblicza ES (alpha), LS (beta) i znajduje ścieżkę krytyczną.
-  
-  Args:
-    num_nodes (int): Liczba węzłów (zdarzeń)
-    edges (list): Lista krotek (u, v, waga), gdzie u->v to zadanie o czasie 'waga'
-      
-  Returns:
-    tuple: (czas_projektu, lista_węzłów_krytycznych, tabela_ES, tabela_LS)
-  """
-  # Budowanie grafu i stopnie wejściowe (do sortowania topologicznego)
-  adj = defaultdict(list)
-  rev_adj = defaultdict(list) # Graf odwrócony do fazy "w tył"
-  in_degree = [0] * num_nodes
-  
-  for u, v, w in edges:
-    adj[u].append((v, w))
-    rev_adj[v].append((u, w))
-    in_degree[v] += 1
-      
-  # --- KROK 1: Sortowanie topologiczne (Algorytm Kahna) ---
-  topo_order = []
-  queue = deque([i for i in range(num_nodes) if in_degree[i] == 0])
-  
-  while queue:
-    u = queue.popleft()
-    topo_order.append(u)
-    for v, w in adj[u]:
-      in_degree[v] -= 1
-      if in_degree[v] == 0:
-        queue.append(v)
-              
-  if len(topo_order) != num_nodes:
-    raise ValueError("Graf zawiera cykl! CPM działa tylko dla DAG.")
-
-  # --- KROK 2: Faza w przód (Obliczanie ES / alpha) ---
-  # ES[j] = max(ES[i] + waga(i, j)) dla wszystkich poprzedników i
-  es = [-float('inf')] * num_nodes
-  
-  # Zakładamy, że węzły startowe (bez poprzedników) mają czas 0
-  # (Chyba że wszystkie mają in_degree > 0, co w DAGu niemożliwe)
-  for u in topo_order:
-    if es[u] == -float('inf'): es[u] = 0 # Start
+        merged = HuffmanNode(None, left.freq + right.freq)
+        merged.left = left
+        merged.right = right
+        
+        heapq.heappush(heap, merged)
+        
+    root = heap[0]
+    codes = {}
     
-    for v, w in adj[u]:
-      if es[u] + w > es[v]:
-        es[v] = es[u] + w
-              
-  project_duration = max(es) # Czas całego projektu (CP)
+    def generate_codes(node, current_code):
+        if node is None:
+            return
+        if node.char is not None:
+            codes[node.char] = current_code
+            return
+        generate_codes(node.left, current_code + "0")
+        generate_codes(node.right, current_code + "1")
+        
+    generate_codes(root, "")
+    return codes
 
-  # --- KROK 3: Faza w tył (Obliczanie LS / beta) ---
-  # LS[j] = min(LS[k] - waga(j, k)) dla wszystkich następników k
-  ls = [float('inf')] * num_nodes
-
-  # Węzły końcowe (bez następników) mają LS = czas_projektu
-  for u in range(num_nodes):
-    if not adj[u]:  # brak krawędzi wychodzących
-      ls[u] = project_duration
-
-  # Przechodzimy w odwrotnej kolejności topologicznej
-  for u in reversed(topo_order):
-    for v, w in adj[u]:
-      if ls[v] - w < ls[u]:
-        ls[u] = ls[v] - w
-
-  # --- KROK 4: Identyfikacja ścieżki krytycznej ---
-  # Węzeł jest krytyczny, jeśli ES == LS (luz == 0)
-  critical_nodes = []
-  for i in range(num_nodes):
-    if abs(es[i] - ls[i]) < 1e-9: # Porównanie float
-      critical_nodes.append(i)
-
-  # Sortujemy, żeby ładnie wyglądało
-  critical_nodes.sort()
-          
-  return project_duration, critical_nodes, es, ls
-
-class Dinic:
-  class Edge:
-    def __init__(self, v, capacity, flow, rev_index):
-      self.v = v              # Dokąd prowadzi krawędź
-      self.capacity = capacity # Przepustowość (Upper Bound)
-      self.flow = flow        # Aktualny przepływ
-      self.rev_index = rev_index # Indeks krawędzi powrotnej w liście sąsiada
-
-  def __init__(self, num_nodes):
-    self.n = num_nodes
-    self.graph = [[] for _ in range(num_nodes)]
-    self.level = []
-
-  def add_edge(self, u, v, capacity):
-    """Dodaje krawędź skierowaną u -> v o danej przepustowości."""
-    # Krawędź "w przód": capacity=C, flow=0
-    forward = self.Edge(v, capacity, 0, len(self.graph[v]))
-    # Krawędź "w tył" (rezydualna): capacity=0, flow=0
-    backward = self.Edge(u, 0, 0, len(self.graph[u]))
+# ==============================================================================
+# 5. Ważona liczba spóźnionych zadań (1 || Sum w_j U_j) - str. 106
+# ==============================================================================
+def weighted_late_jobs(p_times, deadlines, weights):
+    """
+    Implementacja za pomocą Programowania Dynamicznego.
+    Problem jest NP-trudny (plecakowy).
+    dp[t] = maksymalna waga zadań wykonanych o czasie, kończących się dokładnie w czasie t (lub <= t).
+    """
+    n = len(p_times)
+    tasks = []
+    for i in range(n):
+        tasks.append({'p': p_times[i], 'd': deadlines[i], 'w': weights[i], 'id': i+1})
     
-    self.graph[u].append(forward)
-    self.graph[v].append(backward)
-
-  def _bfs(self, s, t):
-    """Buduje sieć warstwową (Level Graph). Zwraca True jeśli t jest osiągalne."""
-    self.level = [-1] * self.n
-    self.level[s] = 0
-    queue = [s]
+    # Sortujemy po terminach (EDD) - warunek konieczny dla DP w szeregowaniu
+    tasks.sort(key=lambda x: x['d'])
     
+    max_time = sum(p['p'] for p in tasks) # Górne ograniczenie czasu
+    
+    # dp[t] = maksymalna waga zadań, które kończą się w czasie <= t
+    dp = [0] * (max_time + 1)
+    
+    for task in tasks:
+        p = task['p']
+        d = task['d']
+        w = task['w']
+        
+        # Iterujemy od tyłu, jak w plecaku
+        # Zadanie może się skończyć najpóźniej w d, ale też nie później niż max_time
+        limit = min(max_time, d)
+        
+        for t in range(limit, p - 1, -1):
+            if dp[t - p] + w > dp[t]:
+                dp[t] = dp[t - p] + w
+                
+        # Propagacja maksimum w górę (opcjonalne w tym wariancie, 
+        # ale przydatne, by dp[t] znaczyło "w czasie <= t")
+        for t in range(1, max_time + 1):
+             dp[t] = max(dp[t], dp[t-1])
+
+    max_weight_on_time = dp[max_time]
+    total_weight = sum(task['w'] for task in tasks)
+    
+    return total_weight - max_weight_on_time
+
+# ==============================================================================
+# 6. Liczba spóźnionych zadań (Moore-Hodgson) - str. 105
+# ==============================================================================
+def moore_hodgson(p_times, deadlines):
+    """
+    Minimalizacja liczby spóźnionych zadań (1 || U_j).
+    Algorytm zachłanny O(n log n).
+    """
+    tasks = []
+    for i in range(len(p_times)):
+        tasks.append((p_times[i], deadlines[i], i + 1))
+        
+    # 1. Sortuj zadania wg terminów (EDD)
+    tasks.sort(key=lambda x: x[1])
+    
+    current_time = 0
+    scheduled_tasks = [] # Max-heap (przechowuje (-p, deadline, id))
+    
+    late_tasks = []
+    
+    for p, d, task_id in tasks:
+        heapq.heappush(scheduled_tasks, (-p, d, task_id))
+        current_time += p
+        
+        if current_time > d:
+            # Jeśli przekroczyliśmy termin, wyrzucamy najdłuższe zadanie z dotychczasowych
+            longest_p, longest_d, longest_id = heapq.heappop(scheduled_tasks)
+            # longest_p jest ujemne, więc odejmując dodajemy
+            current_time += longest_p 
+            late_tasks.append(longest_id)
+            
+    num_late = len(late_tasks)
+    return num_late, late_tasks
+
+# ==============================================================================
+# 7. Metoda Ścieżki Krytycznej (CPM)
+# ==============================================================================
+def cpm(n, durations, edges):
+    """
+    n: liczba wierzchołków
+    durations: lista czasów trwania zadań (wierzchołków)
+    edges: lista krotek (u, v) oznaczająca u -> v
+    Zwraca: (ES, LS, Critical_Path_Length)
+    """
+    adj = defaultdict(list)
+    in_degree = [0] * n
+    for u, v in edges:
+        adj[u].append(v)
+        in_degree[v] += 1
+        
+    # Sortowanie topologiczne
+    queue = deque([i for i in range(n) if in_degree[i] == 0])
+    topo_order = []
     while queue:
-      u = queue.pop(0)
-      for edge in self.graph[u]:
-        # Jeśli krawędź ma wolną przepustowość i wierzchołek nieodwiedzony
-        if edge.capacity - edge.flow > 0 and self.level[edge.v] < 0:
-          self.level[edge.v] = self.level[u] + 1
-          queue.append(edge.v)
-    
-    return self.level[t] >= 0
-
-  def _dfs(self, u, t, pushed_flow, ptr):
-    """Szuka potoku blokującego w sieci warstwowej."""
-    if pushed_flow == 0 or u == t:
-      return pushed_flow
-    
-    # ptr[u] to optymalizacja: pamiętamy, które krawędzie już nasyciliśmy,
-    # żeby ich nie sprawdzać ponownie w tej samej fazie.
-    for i in range(ptr[u], len(self.graph[u])):
-      ptr[u] = i # Aktualizujemy wskaźnik
-      edge = self.graph[u][i]
-      
-      # Warunek Dinica: idziemy tylko do następnej warstwy (level + 1)
-      # i tylko jeśli jest miejsce w krawędzi
-      if self.level[u] + 1 != self.level[edge.v] or edge.capacity - edge.flow == 0:
-        continue
-      
-      # Rekurencyjnie pchamy tyle, ile się da (min z obecnego push i wolnego miejsca)
-      tr = self._dfs(edge.v, t, min(pushed_flow, edge.capacity - edge.flow), ptr)
-      
-      if tr == 0:
-        continue
-      
-      # Aktualizacja przepływów (forward i backward)
-      edge.flow += tr
-      self.graph[edge.v][edge.rev_index].flow -= tr
-      
-      return tr
+        u = queue.popleft()
+        topo_order.append(u)
+        for v in adj[u]:
+            in_degree[v] -= 1
+            if in_degree[v] == 0:
+                queue.append(v)
+                
+    if len(topo_order) != n:
+        raise ValueError("Graf zawiera cykl!")
         
-    return 0
-
-  def solve_max_flow(self, s, t):
-    max_flow = 0
-    # Dopóki da się zbudować sieć warstwową (dojść do ujścia)
-    while self._bfs(s, t):
-      ptr = [0] * self.n # Reset wskaźników dla każdej fazy
-      while True:
-        pushed = self._dfs(s, t, float('inf'), ptr)
-        if pushed == 0:
-          break
-        max_flow += pushed
+    # ES (Earliest Start)
+    es = [0] * n
+    # EF (Earliest Finish) = ES + duration
+    ef = [0] * n
+    
+    for u in topo_order:
+        ef[u] = es[u] + durations[u]
+        for v in adj[u]:
+            es[v] = max(es[v], ef[u])
             
-    return max_flow
-
-def scheduling_lpt(processing_times, num_machines):
-  """
-  Algorytm LPT (Longest Processing Time) dla problemu P||Cmax.
-  
-  Args:
-    processing_times (list): Czasy wykonywania zadań
-    num_machines (int): Liczba maszyn
-      
-  Returns:
-    float: Maksymalny czas zakończenia (Cmax)
-    list: Harmonogram (lista list, assignments[i] to zadania na maszynie i)
-  """
-  # 1. Zachowujemy oryginalne indeksy zadań: (czas, oryginalny_id)
-  jobs = []
-  for i, p in enumerate(processing_times):
-    jobs.append((p, i))
-      
-  # 2. Sortujemy zadania malejąco wg czasu (Longest Processing Time)
-  jobs.sort(key=lambda x: x[0], reverse=True)
-  
-  # 3. Inicjalizacja maszyn (kopiec min-heap do szybkiego szukania najmniej obciążonej)
-  # W kopcu trzymamy krotki: (aktualne_obciążenie, numer_maszyny)
-  machines_heap = [(0, i) for i in range(num_machines)]
-  heapq.heapify(machines_heap)
-  
-  # Struktura do zapisu wyniku: assignments[nr_maszyny] = [(id_zadania, start, koniec), ...]
-  assignments = [[] for _ in range(num_machines)]
-  
-  for p, job_id in jobs:
-    # Pobierz najmniej obciążoną maszynę
-    current_load, machine_id = heapq.heappop(machines_heap)
+    c_max = max(ef)
     
-    start_time = current_load
-    end_time = current_load + p
+    # LS (Latest Start)
+    ls = [c_max - durations[i] for i in range(n)] # Inicjalizacja na max possible
+    lf = [c_max] * n
     
-    # Przypisz zadanie
-    assignments[machine_id].append({
-      'id': job_id,
-      'start': start_time,
-      'end': end_time,
-      'duration': p
-    })
-    
-    # Zaktualizuj obciążenie maszyny i wrzuć z powrotem na kopiec
-    new_load = end_time
-    heapq.heappush(machines_heap, (new_load, machine_id))
-      
-  # Oblicz Cmax (największe obciążenie spośród maszyn)
-  c_max = max(load for load, _ in machines_heap)
-  
-  return c_max, assignments
-
-class BipartiteMatching:
-  def __init__(self, bi_adj_matrix):
-    """
-    Args:
-        bi_adj_matrix: Macierz (N x M), gdzie wiersze to zbiór U, kolumny to zbiór V.
-                        1 oznacza krawędź, 0 brak.
-    """
-    self.graph = np.array(bi_adj_matrix)
-    self.num_left = self.graph.shape[0]  # Liczba wierzchołków w lewej grupie
-    self.num_right = self.graph.shape[1] # Liczba wierzchołków w prawej grupie
-    
-    # Tablica przechowująca, z kim skojarzony jest wierzchołek z prawej grupy
-    # match_right[v] = u (oznacza, że v z prawej jest połączony z u z lewej)
-    # -1 oznacza, że jest wolny
-    self.match_right = [-1] * self.num_right
-
-  def _dfs(self, u, visited):
-    """
-    Przeszukiwanie w głąb szukające ścieżki powiększającej dla wierzchołka u.
-    """
-    for v in range(self.num_right):
-      # Jeśli istnieje krawędź u-v I wierzchołek v nie był jeszcze odwiedzony w tej iteracji
-      if self.graph[u][v] > 0 and not visited[v]:
-        visited[v] = True
+    for u in reversed(topo_order):
+        # LF[u] = min(LS[v]) dla wszystkich v będących następcami u
+        if adj[u]:
+            lf[u] = min(ls[v] for v in adj[u])
+        else:
+            lf[u] = c_max
+        ls[u] = lf[u] - durations[u]
         
-        # Jeśli v jest wolny LUB osoba zajmująca v (match_right[v]) może znaleźć innego partnera
-        if self.match_right[v] < 0 or self._dfs(self.match_right[v], visited):
-          self.match_right[v] = u
-          return True
-    return False
+    return es, ls, c_max
 
-  def solve(self):
-    match_count = 0
-    self.match_right = [-1] * self.num_right # Reset
+# ==============================================================================
+# 8 & 9. Algorytm Dinica i Przepływy z ograniczeniami
+# ==============================================================================
+class Dinic:
+    def __init__(self, n):
+        self.n = n
+        self.graph = [[] for _ in range(n)]
+        self.level = []
+
+    def add_edge(self, u, v, capacity):
+        # Forward edge: index w liście sąsiadów u to len(graph[u])
+        # Backward edge: index w liście sąsiadów v to len(graph[v])
+        self.graph[u].append([v, capacity, len(self.graph[v])])
+        self.graph[v].append([u, 0, len(self.graph[u]) - 1])
+
+    def bfs(self, s, t):
+        self.level = [-1] * self.n
+        self.level[s] = 0
+        queue = deque([s])
+        while queue:
+            u = queue.popleft()
+            for v, cap, rev_idx in self.graph[u]:
+                if cap > 0 and self.level[v] < 0:
+                    self.level[v] = self.level[u] + 1
+                    queue.append(v)
+        return self.level[t] >= 0
+
+    def dfs(self, u, t, flow, ptr):
+        if u == t or flow == 0:
+            return flow
+        for i in range(ptr[u], len(self.graph[u])):
+            ptr[u] = i
+            v, cap, rev_idx = self.graph[u][i]
+            if self.level[v] == self.level[u] + 1 and cap > 0:
+                pushed = self.dfs(v, t, min(flow, cap), ptr)
+                if pushed > 0:
+                    self.graph[u][i][1] -= pushed
+                    self.graph[v][rev_idx][1] += pushed
+                    return pushed
+        return 0
+
+    def max_flow(self, s, t):
+        max_f = 0
+        while self.bfs(s, t):
+            ptr = [0] * self.n
+            while True:
+                pushed = self.dfs(s, t, float('inf'), ptr)
+                if pushed == 0:
+                    break
+                max_f += pushed
+        return max_f
+
+def flow_with_bounds(n, s, t, edges):
+    """
+    edges: list of (u, v, lower_bound, capacity)
+    Zwraca: (czy_możliwe, max_flow)
+    """
+    SS = n
+    TT = n + 1
+    dinic = Dinic(n + 2)
+
+    balance = [0] * n
+
+    # Budowa grafu z capacity = cap - low
+    for u, v, low, cap in edges:
+        dinic.add_edge(u, v, cap - low)
+        balance[u] -= low
+        balance[v] += low
+
+    demand = 0
+    for i in range(n):
+        if balance[i] > 0:
+            dinic.add_edge(SS, i, balance[i])
+            demand += balance[i]
+        elif balance[i] < 0:
+            dinic.add_edge(i, TT, -balance[i])
+
+    # krawędź domykająca obieg
+    dinic.add_edge(t, s, float('inf'))
+
+    # sprawdzamy istnienie cyrkulacji
+    flow = dinic.max_flow(SS, TT)
+    if flow != demand:
+        return False, 0
+
+    # usuwamy SS, TT (nie fizycznie, tylko logicznie)
+    # szukamy max flow s -> t w grafie resztowym
+    max_flow = dinic.max_flow(s, t)
+    return True, max_flow
+
+# ==============================================================================
+# 10. Szeregowanie zadań na maszynach (List Scheduling)
+# ==============================================================================
+def list_scheduling(p_times, m):
+    """
+    Algorytm zachłanny LS dla P || Cmax.
+    """
+    # Kolejka priorytetowa maszyn: (moment_zakończenia, id_maszyny)
+    machines = [(0, i) for i in range(m)]
+    heapq.heapify(machines)
     
-    for u in range(self.num_left):
-      # Dla każdego wierzchołka z lewej szukamy możliwości skojarzenia
-      visited = [False] * self.num_right
-      if self._dfs(u, visited):
-        match_count += 1
+    task_assignments = [[] for _ in range(m)]
+    
+    for i, p in enumerate(p_times):
+        finish_time, machine_id = heapq.heappop(machines)
+        
+        start_time = finish_time
+        new_finish_time = start_time + p
+        
+        task_assignments[machine_id].append(i + 1)
+        heapq.heappush(machines, (new_finish_time, machine_id))
+        
+    c_max = max(m[0] for m in machines) # Po pętli heap może nie być posortowany idealnie, ale max wyciągniemy
+    # Lepiej:
+    c_max = max(item[0] for item in machines)
+    return c_max, task_assignments
+
+# ==============================================================================
+# 11. Algorytm Schrage / Carlier (Hipoteza dla stron 241-246)
+# ==============================================================================
+def schrage(tasks):
+    """
+    Algorytm Schrage dla 1 | r_j | L_max (lub pomocniczo w Carlier).
+    Tasks: lista obiektów/słowników {r, p, q, id}
+    q = czas stygnięcia (delivery time), L_max = max(C_j + q_j)
+    Jeśli zadanie nie ma q, przyjmij q=0.
+    """
+    # Sortuj wg r_j
+    N = sorted(tasks, key=lambda x: x['r'])
+    G = [] # Gotowe zadania (kolejka priorytetowa wg q_j malejąco)
+    
+    t = 0
+    k = 0
+    u_max = -float('inf')
+    schedule = []
+    
+    while G or k < len(N):
+        while k < len(N) and N[k]['r'] <= t:
+            # Dodaj do gotowych: w Pythonie heapq to min-heap, więc wrzucamy -q
+            heapq.heappush(G, (-N[k]['q'], N[k]))
+            k += 1
             
-    # Przygotowanie wyników (lista par)
-    pairs = []
-    for v in range(self.num_right):
-      if self.match_right[v] != -1:
-        pairs.append((self.match_right[v], v))
-    
-    # Sortowanie par dla czytelności (wg lewej strony)
-    pairs.sort(key=lambda x: x[0])
-    
-    return match_count, pairs
-  
+        if not G:
+            t = N[k]['r']
+            continue
+            
+        _, task = heapq.heappop(G)
+        t += task['p']
+        u_max = max(u_max, t + task['q'])
+        schedule.append(task['id'])
+        
+    return u_max, schedule
+
+def schrage_pmtn(tasks):
+    """
+    Preemptive Schrage
+    1 | r_j, pmtn | L_max
+    Zwraca: L_max (dolne ograniczenie)
+    """
+    tasks = [{'r': t['r'], 'p': t['p'], 'q': t['q']} for t in tasks]
+    N = sorted(tasks, key=lambda x: x['r'])
+    G = []
+
+    t = 0
+    L_max = 0
+    current = None
+
+    while G or N or current:
+        while N and N[0]['r'] <= t:
+            job = N.pop(0)
+            heapq.heappush(G, (-job['q'], job))
+            if current and job['q'] > current['q']:
+                current['p'] -= (t - current['start'])
+                t = job['r']
+                if current['p'] > 0:
+                    heapq.heappush(G, (-current['q'], current))
+                current = None
+
+        if not current:
+            if not G:
+                t = N[0]['r']
+                continue
+            _, current = heapq.heappop(G)
+            current['start'] = t
+
+        next_r = N[0]['r'] if N else float('inf')
+        exec_time = min(current['p'], next_r - t)
+        current['p'] -= exec_time
+        t += exec_time
+
+        if current['p'] == 0:
+            L_max = max(L_max, t + current['q'])
+            current = None
+
+    return L_max
+
+# ==============================================================================
+# 12. Algorytm Browna (Kolorowanie Grafów)
+# ==============================================================================
 class BrownColoring:
-  def __init__(self, adj_matrix):
+    def __init__(self, n, edges):
+        self.n = n
+        self.adj = [set() for _ in range(n)]
+        for u, v in edges:
+            self.adj[u].add(v)
+            self.adj[v].add(u)
+            
+        self.best_coloring = {}
+        self.min_colors = n + 1
+        self.colors = {} # current coloring
+
+    def is_safe(self, node, color):
+        for neighbor in self.adj[node]:
+            if neighbor in self.colors and self.colors[neighbor] == color:
+                return False
+        return True
+
+    def solve(self, node_idx=0, used_colors_count=0):
+        # Branch & Bound
+        if used_colors_count >= self.min_colors:
+            return
+
+        if node_idx == self.n:
+            if used_colors_count < self.min_colors:
+                self.min_colors = used_colors_count
+                self.best_coloring = self.colors.copy()
+            return
+
+        # Próbuj pokolorować wierzchołek node_idx
+        # Algorytm Browna: próbuj kolory 1..used_colors_count + 1
+        for c in range(1, used_colors_count + 2):
+            if self.is_safe(node_idx, c):
+                self.colors[node_idx] = c
+                new_count = max(used_colors_count, c)
+                
+                # Proste cięcie
+                if new_count < self.min_colors:
+                    self.solve(node_idx + 1, new_count)
+                
+                del self.colors[node_idx] # backtrack
+
+def brown_algorithm(n, edges):
+    solver = BrownColoring(n, edges)
+    # Heurystyka na start: sortuj wierzchołki wg stopnia (opcjonalne, ale przyspiesza)
+    # Tu wersja podstawowa (rekurencja po indeksach 0..n-1)
+    solver.solve()
+    return solver.min_colors, solver.best_coloring
+
+# ==============================================================================
+# 13. Algorytm Carliera (1 | r_j | L_max) – str. 241–246
+# ==============================================================================
+def carlier(tasks):
     """
-    Inicjalizacja solvera Algorytmu Browna.
-    Args:
-        adj_matrix: Macierz sąsiedztwa (NxN), gdzie 1 oznacza krawędź.
+    Algorytm Carliera dla problemu 1 | r_j | L_max.
+    tasks: lista słowników {id, r, p, q}
+    Zwraca: (L_max, kolejność zadań)
     """
-    self.adj = np.array(adj_matrix)
-    self.n = len(adj_matrix)
-    
-    # Upper Bound (UB) - najlepsza znana liczba kolorów.
-    # Na początku pesymistycznie zakładamy n+1.
-    self.ub = self.n + 1
-    
-    # Przechowuje najlepsze znalezione przypisanie kolorów
-    self.best_coloring = np.zeros(self.n, dtype=int)
-    
-    # Tablica bieżących kolorów (indeksowana wg posortowanych wierzchołków)
-    self.current_coloring = np.zeros(self.n, dtype=int)
-    
-    # Sortowanie wierzchołków malejąco wg stopnia (heurystyka LF)
-    # To kluczowe ulepszenie dla Algorytmu Browna.
-    degrees = np.sum(self.adj, axis=1)
-    self.order = np.argsort(degrees)[::-1]
-    
-    # Mapowanie odwrotne do sprawdzania sąsiedztwa w oryginalnej macierzy
-    self.orig_indices = {sorted_idx: orig_idx for sorted_idx, orig_idx in enumerate(self.order)}
+    UB, pi = schrage(tasks)
+    LB = schrage_pmtn(tasks)
 
-  def is_safe(self, node_idx, color):
-    """
-    Sprawdza, czy można nadać dany kolor wierzchołkowi 'node_idx'
-    (względem już pokolorowanych wcześniejszych sąsiadów).
-    """
-    original_u = self.order[node_idx]
-    
-    # Sprawdzamy tylko wierzchołki już odwiedzone (indeksy < node_idx)
-    for i in range(node_idx):
-      if self.current_coloring[i] == color:
-        original_v = self.order[i]
-        # Sprawdzenie w oryginalnej macierzy sąsiedztwa
-        if self.adj[original_u][original_v] == 1:
-          return False
-    return True
+    if LB >= UB:
+        return UB, pi
 
-  def _brown_recursive(self, k, q):
-    """
-    Rekurencyjna implementacja logiki Forward/Backtrack.
-    k: indeks aktualnie kolorowanego wierzchołka (w posortowanej tablicy)
-    q: liczba użytych dotąd kolorów (max color index użyty w 0..k-1)
-    """
-    # Jeśli bieżące rozwiązanie już wymaga tyle samo lub więcej kolorów co najlepsze znane,
-    # to odcinamy tę gałąź (PRUNING) - istota algorytmu Browna.
-    if q >= self.ub:
-      return
+    # wyznaczenie bloku krytycznego
+    t = 0
+    C = []
+    for job_id in pi:
+        job = next(j for j in tasks if j['id'] == job_id)
+        t = max(t, job['r']) + job['p']
+        C.append((job, t))
 
-    # Jeśli dotarliśmy do końca (wszystkie wierzchołki pokolorowane)
-    if k == self.n:
-      if q < self.ub:
-        self.ub = q
-        self.best_coloring = self.current_coloring.copy()
-      return
+    b = max(range(len(C)), key=lambda i: C[i][1] + C[i][0]['q'])
 
-    # Próbujemy kolorów od 1 do q+1.
-    # Algorytm Browna wymusza sprawdzanie kolorów w kolejności rosnącej.
-    # Możemy wprowadzić nowy kolor (q+1) tylko jeśli nie da się użyć 1..q.
-    for c in range(1, q + 2):
-      # Kolejne cięcie: jeśli lokalny kolor c osiągnie UB, to nie ma sensu go używać,
-      # bo i tak nie poprawimy wyniku.
-      if c >= self.ub:
-        break
+    a = b
+    while a > 0:
+        if C[a - 1][1] == C[a][1] - C[a][0]['p']:
+            a -= 1
+        else:
+            break
 
-      if self.is_safe(k, c):
-        self.current_coloring[k] = c
-        
-        # Obliczamy nowe q (czy wprowadziliśmy nowy, wyższy kolor?)
-        new_q = max(q, c)
-        
-        # Krok w przód (Forward)
-        self._brown_recursive(k + 1, new_q)
-        
-        # Backtracking (cofnięcie przypisania przy powrocie z rekurencji)
-        self.current_coloring[k] = 0
+    c = None
+    for i in range(a, b):
+        if C[i][0]['q'] < C[b][0]['q']:
+            c = i
+    if c is None:
+        return UB, pi
 
-  def solve(self):
-    """Uruchamia algorytm i zwraca (liczba_chromatyczna, mapowanie_kolorów)."""
-    # Startujemy od wierzchołka 0, liczba użytych kolorów = 0
-    self._brown_recursive(0, 0)
-    
-    # Odtworzenie wyniku w oryginalnej kolejności wierzchołków
-    final_result = {}
-    for sorted_idx, color in enumerate(self.best_coloring):
-      original_idx = self.order[sorted_idx]
-      final_result[original_idx] = color
-        
-    # Zwracamy posortowaną listę kolorów (dla wierzchołków 0, 1, 2...)
-    sorted_colors = [final_result[i] for i in range(self.n)]
-    return self.ub, sorted_colors
+    block = C[c + 1 : b + 1]
+    r_block = min(j['r'] for j, _ in block)
+    p_block = sum(j['p'] for j, _ in block)
+    q_block = min(j['q'] for j, _ in block)
 
-def flow_with_lower_bounds(num_nodes, edges, source, sink):
-  """
-  Przepływ w sieci z dolnymi i górnymi ograniczeniami.
+    job_c = C[c][0]
+    r_old, q_old = job_c['r'], job_c['q']
 
-  Args:
-    num_nodes (int): liczba węzłów
-    edges (list): lista krotek (u, v, lower, upper)
-    source (int): źródło
-    sink (int): ujście
+    # gałąź 1: modyfikacja r_c
+    job_c['r'] = max(job_c['r'], r_block + p_block)
+    UB1, _ = carlier(tasks)
+    UB = min(UB, UB1)
+    job_c['r'] = r_old
 
-  Returns:
-    bool: czy istnieje dopuszczalny przepływ
-    int: wartość przepływu (jeśli istnieje)
-  """
+    # gałąź 2: modyfikacja q_c
+    job_c['q'] = max(job_c['q'], q_block + p_block)
+    UB2, _ = carlier(tasks)
+    UB = min(UB, UB2)
+    job_c['q'] = q_old
 
-  # Graf pomocniczy z super-źródłem i super-ujściem
-  super_source = num_nodes
-  super_sink = num_nodes + 1
-  dinic = Dinic(num_nodes + 2)
-
-  balance = [0] * (num_nodes + 2)
-
-  # 1. Redukcja: usuwamy dolne ograniczenia
-  for u, v, lower, upper in edges:
-    # Nowa przepustowość = upper - lower
-    dinic.add_edge(u, v, upper - lower)
-    balance[u] -= lower
-    balance[v] += lower
-
-  # 2. Dodanie krawędzi z super-źródła / do super-ujścia
-  for i in range(num_nodes):
-    if balance[i] > 0:
-      dinic.add_edge(super_source, i, balance[i])
-    elif balance[i] < 0:
-      dinic.add_edge(i, super_sink, -balance[i])
-
-  # 3. Krawędź sink -> source o nieskończonej przepustowości
-  INF = 10**18
-  dinic.add_edge(sink, source, INF)
-
-  # 4. Sprawdzenie istnienia przepływu
-  total_demand = sum(b for b in balance if b > 0)
-  flow = dinic.solve_max_flow(super_source, super_sink)
-
-  if flow != total_demand:
-    return False, 0
-
-  # 5. Obliczenie rzeczywistego przepływu source -> sink
-  # (usuwamy sztuczne węzły, liczymy przepływ przez krawędź sink->source)
-  result_flow = 0
-  for edge in dinic.graph[sink]:
-    if edge.v == source:
-      result_flow = edge.flow
-      break
-
-  return True, result_flow
+    return UB, pi
