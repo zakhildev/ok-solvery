@@ -691,3 +691,95 @@ def floyd_warshall(n, adj_matrix):
                         D[i][j] = D[i][k] + D[k][j]
 
     return D
+  
+# ==============================================================================
+# 15. Skojarzenia w grafach dwudzielnych (Algorytm Etykietowania) - str. 243-246
+# ==============================================================================
+def bipartite_matching_labeling(n_x, n_y, edges):
+    """
+    Znajduje maksymalne skojarzenie w grafie dwudzielnym metodą etykietowania.
+    Implementacja oparta na procedurach scan_left / scan_right oraz stosie LIFO.
+    
+    Złożoność: O(nm)
+    
+    Wejście:
+        n_x: liczba wierzchołków w zbiorze X (indeksy 0..n_x-1)
+        n_y: liczba wierzchołków w zbiorze Y (indeksy 0..n_y-1)
+        edges: lista krotek (u, v), gdzie u należy do X, v należy do Y
+        
+    Wyjście:
+        size: liczność skojarzenia
+        matching: lista krotek (u, v) należących do skojarzenia
+    """
+    # Budowa list sąsiedztwa dla zbioru X
+    adj = [[] for _ in range(n_x)]
+    for u, v in edges:
+        if 0 <= u < n_x and 0 <= v < n_y:
+            adj[u].append(v)
+
+    # M: Aktualne skojarzenie
+    # match_x[u] = v (u z X jest skojarzony z v z Y)
+    # match_y[v] = u (v z Y jest skojarzony z u z X)
+    match_x = [-1] * n_x
+    match_y = [-1] * n_y
+
+    def find_augmenting_path():
+        # L_set: zbiór wolnych wierzchołków w X (zainicjowany na początku)
+        # Stos (LIFO) do przechowywania wierzchołków do przetworzenia
+        # Elementy na stosie to krotki: (wierzchołek, strona 'X' lub 'Y')
+        stack = []
+        
+        # Słownik etykiet do odtwarzania ścieżki: labels[node] = parent_node
+        # Klucze to krotki (id, 'X') lub (id, 'Y')
+        labels = {}
+        
+        # Inicjalizacja stosu wolnymi wierzchołkami z X
+        free_x = [u for u in range(n_x) if match_x[u] == -1]
+        for u in free_x:
+            stack.append((u, 'X'))
+            labels[(u, 'X')] = None # Korzenie ścieżek
+            
+        visited = set()
+        for u in free_x:
+            visited.add((u, 'X'))
+
+        while stack:
+            curr_id, side = stack.pop() # LIFO behavior
+
+            if side == 'X':
+                # scan_left(u)
+                # Przeglądamy sąsiadów u (wierzchołki v z Y)
+                u = curr_id
+                for v in adj[u]:
+                    if (v, 'Y') not in visited:
+                        visited.add((v, 'Y'))
+                        labels[(v, 'Y')] = (u, 'X') # Etykietujemy v przez u
+                        stack.append((v, 'Y'))      # Dodajemy do R (na stos)
+            
+            else: # side == 'Y'
+                # scan_right(v)
+                v = curr_id
+                u_matched = match_y[v]
+                
+                if u_matched != -1:
+                    # Jeśli v jest skojarzony z u_matched, idziemy po krawędzi skojarzenia
+                    if (u_matched, 'X') not in visited:
+                        visited.add((u_matched, 'X'))
+                        labels[(u_matched, 'X')] = (v, 'Y') # Etykietujemy u przez v
+                        stack.append((u_matched, 'X'))      # Dodajemy do L (na stos)
+                else:
+                    # Jeśli v jest wolny, znaleźliśmy ścieżkę powiększającą!
+                    return v, labels
+        
+        return None, None
+
+    # Główna pętla algorytmu
+    while True:
+        # 1. Szukaj ścieżki powiększającej
+        end_v, labels = find_augmenting_path()
+        
+        # Jeśli nie znaleziono ścieżki, kończymy
+        if end_v is None:
+            break
+            
+        # 2. Powiększ skojarzenie (M
