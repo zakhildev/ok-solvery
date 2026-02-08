@@ -257,6 +257,77 @@ def run_brown():
     print("Kolorowanie (wierzchołek: kolor):")
     for node in sorted(coloring.keys()):
         print(f"  {node}: {coloring[node]}")
+        
+def run_floyd_warshall():
+    print("\n--- Algorytm Floyda-Warshalla (Najkrótsze ścieżki) ---")
+    print("Instrukcja: Podaj liczbę wierzchołków. Macierz zostanie zainicjowana INF.")
+    print("Następnie podaj krawędzie, aby uzupełnić wagi.")
+    
+    n = get_int("Liczba wierzchołków (n): ")
+    
+    # Inicjalizacja macierzy z INF i zerami na przekątnej
+    inf = float('inf')
+    adj_matrix = [[inf] * n for _ in range(n)]
+    for i in range(n):
+        adj_matrix[i][i] = 0
+        
+    m = get_int("Liczba krawędzi: ")
+    print("Podaj krawędzie (u v waga), gdzie u,v to indeksy 0..n-1:")
+    for _ in range(m):
+        u, v, w = get_list_float("-> ")
+        u, v = int(u), int(v)
+        if 0 <= u < n and 0 <= v < n:
+            adj_matrix[u][v] = w # Zakładamy graf skierowany
+            # Jeśli graf nieskierowany, odkomentuj: adj_matrix[v][u] = w
+        else:
+            print(f"Błąd: Wierzchołki muszą być w zakresie 0..{n-1}")
+
+    D = solvers.floyd_warshall(n, adj_matrix)
+    
+    print_separator()
+    print("Macierz najkrótszych odległości:")
+    
+    # Nagłówek kolumn
+    print("      ", end="")
+    for i in range(n):
+        print(f"{i:>5}", end=" ")
+    print()
+    
+    for i in range(n):
+        print(f"{i:>3} | ", end="")
+        for j in range(n):
+            val = D[i][j]
+            if val == float('inf'):
+                print(f"{'inf':>5}", end=" ")
+            else:
+                print(f"{val:>5.1f}", end=" ") # Formatowanie do 1 miejsca po przecinku
+        print()
+
+def run_bipartite_matching():
+    print("\n--- Skojarzenia w grafach dwudzielnych (Algorytm Etykietowania) ---")
+    print("Instrukcja: Graf dwudzielny składa się ze zbiorów X i Y.")
+    
+    n_x = get_int("Liczność zbioru X: ")
+    n_y = get_int("Liczność zbioru Y: ")
+    m = get_int("Liczba krawędzi: ")
+    
+    edges = []
+    print(f"Podaj krawędzie (u v), gdzie u należy do X (0..{n_x-1}), v do Y (0..{n_y-1}):")
+    for _ in range(m):
+        line = get_list_int("-> ")
+        if len(line) == 2:
+            edges.append(tuple(line))
+        else:
+            print("Błąd formatu, pomijam.")
+            
+    size, matching = solvers.bipartite_matching_labeling(n_x, n_y, edges)
+    
+    print_separator()
+    print(f"Maksymalna liczność skojarzenia: {size}")
+    print("Skojarzone pary (u z X -- v z Y):")
+    matching.sort() # Sortujemy dla czytelności
+    for u, v in matching:
+        print(f"  X[{u}] -- Y[{v}]")
 
 # ==============================================================================
 # MENU GŁÓWNE
@@ -275,16 +346,19 @@ def main():
         '9': ("List Scheduling (Szeregowanie zachłanne)", run_list_scheduling),
         '10': ("Schrage / Carlier (RPQ)", run_schrage_carlier),
         '11': ("Algorytm Browna (Kolorowanie)", run_brown),
+        '12': ("Algorytm Floyda-Warshalla (Najkrótsze ścieżki)", run_floyd_warshall),
+        '13': ("Skojarzenia w grafach dwudzielnych", run_bipartite_matching),
         '0': ("Wyjście", sys.exit)
     }
 
     while True:
-        print("\n" + "="*40)
+        print("\n" + "="*55)
         print(" SYSTEM ROZWIĄZYWANIA PROBLEMÓW (SOLVERS)")
-        print("="*40)
-        for key, (desc, _) in options.items():
-            print(f"{key}. {desc}")
-        print("="*40)
+        print("="*55)
+        for key in sorted(options.keys(), key=lambda x: int(x)):
+            desc = options[key][0]
+            print(f"{key:>2}. {desc}")
+        print("="*55)
         
         choice = input("Wybierz opcję: ")
         
