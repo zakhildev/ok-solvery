@@ -782,4 +782,28 @@ def bipartite_matching_labeling(n_x, n_y, edges):
         if end_v is None:
             break
             
-        # 2. Powiększ skojarzenie (M
+        # 2. Powiększ skojarzenie (M = M XOR P) 
+        # Odtwarzamy ścieżkę wstecz od wolnego wierzchołka w Y do wolnego wierzchołka w X
+        curr = (end_v, 'Y')
+        path = []
+        while curr is not None:
+            path.append(curr)
+            curr = labels.get(curr)
+            
+        # Ścieżka: Y(end) -> X -> Y -> ... -> X(start)
+        # Pary (X, Y) w ścieżce stają się nowym skojarzeniem
+        for i in range(1, len(path), 2):
+            u_node = path[i][0]      # Wierzchołek z X
+            v_node = path[i-1][0]    # Wierzchołek z Y
+            
+            # Aktualizacja skojarzenia
+            match_x[u_node] = v_node
+            match_y[v_node] = u_node
+
+    # Przygotowanie wyniku
+    result = []
+    for u in range(n_x):
+        if match_x[u] != -1:
+            result.append((u, match_x[u]))
+            
+    return len(result), result
